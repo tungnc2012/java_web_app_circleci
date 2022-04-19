@@ -1,4 +1,4 @@
-version: 2.1
+version: 2.0
 orbs:
   slack: circleci/slack@4.1
 jobs:
@@ -64,10 +64,10 @@ jobs:
           name: Check workspace
           command: pwd && ls -la
   deploy:
-    # docker:
-    #   - image: cimg/openjdk:11.0  
-    working_directory:  ~/ci
+    executor: aws-cli/default
     steps:
+      - attach_workspace:
+          at: ~/ci
       - run: 
           name: Checking folder of build step
           command: cd /home/circleci/project && ls -la
