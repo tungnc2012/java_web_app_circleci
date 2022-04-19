@@ -64,7 +64,7 @@ jobs:
           name: Check workspace
           command: pwd && ls -la
   deploy:
-    executor: aws-cli/default
+    executor: machine
     steps:
       - attach_workspace:
           at: ~/ci
