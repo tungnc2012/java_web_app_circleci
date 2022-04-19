@@ -50,13 +50,13 @@ jobs:
           command: mvn clean install
       - run:
           name: Validate WAR file
-          command: pwd && ls -la ./target && chmod 755 ./target/api.war    
+          command: pwd && ls -la ./target && chmod 755 ./target/LoginWebApp-1.war    
       - run:
           name: Deploy to tomcat server over SSH
           command: |
             ls -la ./target
-            scp -o "StrictHostKeyChecking=no" ./target/api.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
-            ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/api.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
+            scp -o "StrictHostKeyChecking=no" ./target/LoginWebApp-1.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
+            ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/LoginWebApp-1.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
       - run:
           name: Deploy artifact to nexus
           command: |
