@@ -1,0 +1,81 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/2.0/configuration-reference
+version: 2.1
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
+orbs:
+  slack: circleci/slack@4.1
+jobs:
+  build:
+    # These next lines define a Docker executor: https://circleci.com/docs/2.0/executor-types/
+    # You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # Be sure to update the Docker image tag below to openjdk version of your application.
+    # A list of available CircleCI Docker Convenience Images are available here: https://circleci.com/developer/images/image/cimg/openjdk
+    docker:
+      - image: cimg/openjdk:11.0
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
+    working_directory:  ~/ci
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "0f:b3:05:30:eb:c4:f7:0d:aa:1e:9d:ff:e4:ad:ee:28"
+      # Checkout the code as the first step.
+      - checkout
+      # Use mvn clean and package as the standard maven build phase
+      - save_cache:
+          key: 'dependencies-{{ checksum "pom.xml" }}'
+          paths:
+            - ~/.m2 
+      - run:
+          name: List all content from source code
+          command: pwd && ls -la
+      - run:
+          name: Install dependencies
+          command: mvn dependency:go-offline        
+      - run:
+          name: Validate
+          command: mvn -B validate
+      - run:
+          name: Compile
+          command: mvn -B compile                
+      - run:
+          name: Test
+          command: mvn test
+      - run:
+          name: Check code coverage
+          command: mvn clean test
+      - run:
+          name: Install
+          command: mvn clean install
+      - run:
+          name: Validate WAR file
+          command: pwd && ls -la ./target && chmod 755 ./target/api.war    
+      - run:
+          name: Deploy to tomcat server over SSH
+          command: |
+            ls -la ./target
+            scp -o "StrictHostKeyChecking=no" ./target/api.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
+            ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/api.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
+      - run:
+          name: Deploy artifact to nexus
+          command: |
+            curl -u admin:fptproject -X GET 'http://13.215.61.77:8081/service/rest/v1/components?repository=test'
+            curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/api.war -F maven2.asset1.extension=war
+      - slack/notify:
+          event: fail
+          channel: $SLACK_DEFAULT_CHANNEL
+          template: basic_fail_1
+      - slack/notify:
+          channel: $SLACK_DEFAULT_CHANNEL
+          event: pass
+          template: success_tagged_deploy_1
+workflows:
+  build:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: sit
+#Test
+
