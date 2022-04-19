@@ -83,7 +83,7 @@ jobs:
           name: Checking folder of build step
           command: ls -la ~/ci
       - attach_workspace:
-          at: . # relative path to our working directory      
+          at: ./test # relative path to our working directory      
 # workflows:
 #   build:
 #     jobs:
