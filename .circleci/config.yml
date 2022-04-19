@@ -1,5 +1,5 @@
 version: 2.1
-orbs:
+orbs: #for send notification to slack channel
   slack: circleci/slack@4.1
 executors:
   my-executor:
@@ -69,6 +69,10 @@ jobs:
       - run:
           name: Check workspace
           command: pwd && ls -la
+      - save_workspace:
+          root: .     # relative path to our working directory
+          paths:      # file globs which will be persisted to the workspace
+           - /test
   deploy:
     executor:
       name: my-executor
@@ -78,7 +82,8 @@ jobs:
       - run: 
           name: Checking folder of build step
           command: ls -la ~/ci
-      
+      - attach_workspace:
+          at: . # relative path to our working directory      
 # workflows:
 #   build:
 #     jobs:
