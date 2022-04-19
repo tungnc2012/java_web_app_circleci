@@ -1,11 +1,16 @@
 version: 2.0
 orbs:
   slack: circleci/slack@4.1
-  aws-cli: circleci/aws-cli@1.2.0
-jobs:
-  build:
+executors:
+  my-executor:
     docker:
       - image: cimg/openjdk:11.0
+jobs:
+  build:
+    executor:
+      name: my-executor 
+    # docker:
+    #   - image: cimg/openjdk:11.0
     working_directory:  ~/ci
     steps:
       - add_ssh_keys:
@@ -65,7 +70,8 @@ jobs:
           name: Check workspace
           command: pwd && ls -la
   deploy:
-    executor: aws-cli/default
+    executor:
+      name: my-executor
     steps:
       - attach_workspace:
           at: ~/ci
