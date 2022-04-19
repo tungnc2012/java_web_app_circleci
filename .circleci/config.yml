@@ -72,7 +72,7 @@ jobs:
       - save_workspace:
           root: .     # relative path to our working directory
           paths:      # file globs which will be persisted to the workspace
-           - /test
+           - /ci
   deploy:
     executor:
       name: my-executor
@@ -83,7 +83,7 @@ jobs:
           name: Checking folder of build step
           command: ls -la ~/ci
       - attach_workspace:
-          at: ./test # relative path to our working directory      
+          at: ./ci # relative path to our working directory      
 # workflows:
 #   build:
 #     jobs:
