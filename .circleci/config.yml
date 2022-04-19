@@ -52,16 +52,16 @@ jobs:
           name: Validate WAR file
           command: pwd && ls -la ./target && chmod 755 ./target/LoginWebApp-1.war    
       - run:
+          name: Deploy artifact to nexus
+          command: |
+            curl -u admin:fptproject -X GET 'http://13.215.61.77:8081/service/rest/v1/components?repository=test'
+            curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/LoginWebApp-1.war -F maven2.asset1.extension=war      
+      - run:
           name: Deploy to tomcat server over SSH
           command: |
             ls -la ./target
             scp -o "StrictHostKeyChecking=no" ./target/LoginWebApp-1.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
             ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/LoginWebApp-1.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
-      - run:
-          name: Deploy artifact to nexus
-          command: |
-            curl -u admin:fptproject -X GET 'http://13.215.61.77:8081/service/rest/v1/components?repository=test'
-            curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/LoginWebApp-1.war -F maven2.asset1.extension=war
       - slack/notify:
           event: fail
           channel: $SLACK_DEFAULT_CHANNEL
