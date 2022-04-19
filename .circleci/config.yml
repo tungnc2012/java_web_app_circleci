@@ -1,6 +1,7 @@
 version: 2.0
 orbs:
   slack: circleci/slack@4.1
+  aws-cli: circleci/aws-cli@1.2.0
 jobs:
   build:
     docker:
@@ -64,7 +65,7 @@ jobs:
           name: Check workspace
           command: pwd && ls -la
   deploy:
-    executor: machine
+    executor: aws-cli/default
     steps:
       - attach_workspace:
           at: ~/ci
