@@ -1,31 +1,38 @@
 version: 2.1
-orbs: #for send notification to slack channel
+orbs:
   slack: circleci/slack@4.1
 executors:
   my-executor:
     docker:
       - image: cimg/openjdk:11.0
+    working_directory: /home/circleci/project 
 jobs:
-  build:
-    executor:
-      name: my-executor 
-    # docker:
-    #   - image: cimg/openjdk:11.0
-    working_directory:  ~/ci
+  checkout-code:
+    executor: my-executor
+    
     steps:
       - add_ssh_keys:
           fingerprints:
             - "0f:b3:05:30:eb:c4:f7:0d:aa:1e:9d:ff:e4:ad:ee:28"
-      # Checkout the code as the first step.
+      - run: pwd && ls -la
       - checkout
-      # Use mvn clean and package as the standard maven build phase
-      - save_cache:
-          key: 'dependencies-{{ checksum "pom.xml" }}'
+      - run: pwd && ls -la
+      - persist_to_workspace:
+          root: /home/circleci/
           paths:
-            - ~/.m2 
+          - project
+      - run: ls -la /home/circleci/project 
+  build-sit:
+    executor: my-executor
+    steps:
+      - attach_workspace:
+          at: /home/circleci/project
       - run:
-          name: List all content from source code
-          command: pwd && ls -la
+          name: Copy from workspace to build folder
+          command: ls -la /home/circleci/project/project && ls -la /home/circleci/project/ && cd /home/circleci/project/project && cp -r . /home/circleci/project/
+      - run:
+          name: Verify source code
+          command: ls -la
       - run:
           name: Install dependencies
           command: mvn dependency:go-offline        
@@ -39,6 +46,54 @@ jobs:
           name: Test
           command: mvn test
       - run:
+          name: Install
+          command: mvn clean install
+      - run:
+          name: Validate WAR file
+          command: pwd && ls -la ./target && chmod 755 ./target/LoginWebApp-1.war    
+      - run:
+          name: Zip artifact & verify
+          command: zip -r artifact.zip ./target && ls -la /home/circleci/project
+      - run:
+          name: Deploy to tomcat server over SSH
+          command: |
+            ls -la ./target
+            scp -o "StrictHostKeyChecking=no" ./target/LoginWebApp-1.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
+            ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/LoginWebApp-1.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
+      - run:
+          name: Deploy artifact to nexus
+          command: |
+            ls -la
+            curl -v -u admin:MinhVT9 -X POST 'https://nexus.devnull.works/service/rest/v1/components?repository=maven-releases' -F maven2.groupId=api -F maven2.artifactId=api -F maven2.version=4.13.2 -F maven2.asset=@artifact.zip -F maven2.asset.extension=zip
+      - slack/notify:
+          event: fail
+          channel: $SLACK_DEFAULT_CHANNEL
+          template: basic_fail_1
+      - slack/notify:
+          channel: $SLACK_DEFAULT_CHANNEL
+          event: pass
+          template: success_tagged_deploy_1
+  build-master:
+    executor: my-executor
+    steps:
+      - attach_workspace:
+          at: /home/circleci/project
+      - run:
+          name: Copy from workspace to build folder
+          command: ls -la /home/circleci/project/project && ls -la /home/circleci/project/ && cd /home/circleci/project/project && cp -r . /home/circleci/project/
+      - run:
+          name: Verify source code
+          command: ls -la
+      - run:
+          name: Install dependencies
+          command: mvn dependency:go-offline        
+      - run:
+          name: Validate
+          command: mvn -B validate
+      - run:
+          name: Compile
+          command: mvn -B compile                
+      - run:
           name: Check code coverage
           command: mvn clean test
       - run:
@@ -48,16 +103,19 @@ jobs:
           name: Validate WAR file
           command: pwd && ls -la ./target && chmod 755 ./target/LoginWebApp-1.war    
       - run:
-          name: Deploy artifact to nexus
-          command: |
-            curl -u admin:fptproject -X GET 'http://13.215.61.77:8081/service/rest/v1/components?repository=test'
-            curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/LoginWebApp-1.war -F maven2.asset1.extension=war      
+          name: Zip artifact & verify
+          command: zip -r artifact.zip ./target && ls -la /home/circleci/project
       - run:
           name: Deploy to tomcat server over SSH
           command: |
             ls -la ./target
             scp -o "StrictHostKeyChecking=no" ./target/LoginWebApp-1.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
             ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/LoginWebApp-1.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
+      - run:
+          name: Deploy artifact to nexus
+          command: |
+            ls -la
+            curl -v -u admin:MinhVT9 -X POST 'https://nexus.devnull.works/service/rest/v1/components?repository=maven-releases' -F maven2.groupId=api -F maven2.artifactId=api -F maven2.version=4.13.2 -F maven2.asset=@artifact.zip -F maven2.asset.extension=zip
       - slack/notify:
           event: fail
           channel: $SLACK_DEFAULT_CHANNEL
@@ -66,45 +124,141 @@ jobs:
           channel: $SLACK_DEFAULT_CHANNEL
           event: pass
           template: success_tagged_deploy_1
-      - run:
-          name: Check workspace
-          command: pwd && ls -la
-      - save_workspace:
-          root: .     # relative path to our working directory
-          paths:      # file globs which will be persisted to the workspace
-           - /ci
-  deploy:
-    executor:
-      name: my-executor
-    steps:
-      - attach_workspace:
-          at: ~/ci
-      - run: 
-          name: Checking folder of build step
-          command: ls -la ~/ci
-      - attach_workspace:
-          at: ./ci # relative path to our working directory      
-# workflows:
+    
+workflows:
+  checkout-code-and-build:
+    jobs:
+      - checkout-code:
+          filters:
+            branches:
+              only:
+                - sit 
+                - master
+      - build-sit:
+          requires:
+            - checkout-code
+          filters:
+            branches:
+              only: 
+                - sit 
+      - build-master:
+          requires:
+            - checkout-code
+          filters:
+            branches:
+              only: 
+                - master
+#Test
+# curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/LoginWebApp-1.war -F maven2.asset1.extension=war
+
+
+# version: 2.1
+# orbs: #for send notification to slack channel
+#   slack: circleci/slack@4.1
+# executors:
+#   my-executor:
+#     docker:
+#       - image: cimg/openjdk:11.0
+# jobs:
 #   build:
+#     executor:
+#       name: my-executor 
+#     # docker:
+#     #   - image: cimg/openjdk:11.0
+#     working_directory:  ~/ci
+#     steps:
+#       - add_ssh_keys:
+#           fingerprints:
+#             - "0f:b3:05:30:eb:c4:f7:0d:aa:1e:9d:ff:e4:ad:ee:28"
+#       # Checkout the code as the first step.
+#       - checkout
+#       # Use mvn clean and package as the standard maven build phase
+#       - save_cache:
+#           key: 'dependencies-{{ checksum "pom.xml" }}'
+#           paths:
+#             - ~/.m2 
+#       - run:
+#           name: List all content from source code
+#           command: pwd && ls -la
+#       - run:
+#           name: Install dependencies
+#           command: mvn dependency:go-offline        
+#       - run:
+#           name: Validate
+#           command: mvn -B validate
+#       - run:
+#           name: Compile
+#           command: mvn -B compile                
+#       - run:
+#           name: Test
+#           command: mvn test
+#       - run:
+#           name: Check code coverage
+#           command: mvn clean test
+#       - run:
+#           name: Install
+#           command: mvn clean install
+#       - run:
+#           name: Validate WAR file
+#           command: pwd && ls -la ./target && chmod 755 ./target/LoginWebApp-1.war    
+#       - run:
+#           name: Deploy artifact to nexus
+#           command: |
+#             curl -u admin:fptproject -X GET 'http://13.215.61.77:8081/service/rest/v1/components?repository=test'
+#             curl -v -u admin:fptproject -X POST 'http://13.215.61.77:8081/service/rest/v1/components?repository=store-artifact' -F maven2.groupId=com.google.guava -F maven2.artifactId=guava -F maven2.version=24.0-jre -F maven2.asset1=/home/circleci/project/target/LoginWebApp-1.war -F maven2.asset1.extension=war      
+#       - run:
+#           name: Deploy to tomcat server over SSH
+#           command: |
+#             ls -la ./target
+#             scp -o "StrictHostKeyChecking=no" ./target/LoginWebApp-1.war ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com:/tmp
+#             ssh -o "StrictHostKeyChecking=no" ubuntu@ec2-54-151-223-91.ap-southeast-1.compute.amazonaws.com "sudo mv /tmp/LoginWebApp-1.war /opt/tomcat/webapps/ && pwd && sudo ls -la /opt/tomcat/webapps/"
+#       - slack/notify:
+#           event: fail
+#           channel: $SLACK_DEFAULT_CHANNEL
+#           template: basic_fail_1
+#       - slack/notify:
+#           channel: $SLACK_DEFAULT_CHANNEL
+#           event: pass
+#           template: success_tagged_deploy_1
+#       - run:
+#           name: Check workspace
+#           command: pwd && ls -la
+#       - save_workspace:
+#           root: .     # relative path to our working directory
+#           paths:      # file globs which will be persisted to the workspace
+#            - /ci
+#   deploy:
+#     executor:
+#       name: my-executor
+#     steps:
+#       - attach_workspace:
+#           at: ~/ci
+#       - run: 
+#           name: Checking folder of build step
+#           command: ls -la ~/ci
+#       - attach_workspace:
+#           at: ./ci # relative path to our working directory      
+# # workflows:
+# #   build:
+# #     jobs:
+# #       - build:
+# #           filters:
+# #             branches:
+# #               only: sit
+
+# workflows:
+#   version: 2
+#   build-and-deploy:
 #     jobs:
-#       - build:
+#       - build: 
 #           filters:
 #             branches:
 #               only: sit
-
-workflows:
-  version: 2
-  build-and-deploy:
-    jobs:
-      - build: 
-          filters:
-            branches:
-              only: sit
-      - deploy:
-          requires:
-            - build
-          filters:
-            branches:
-              only: sit
+#       - deploy:
+#           requires:
+#             - build
+#           filters:
+#             branches:
+#               only: sit
 
 
